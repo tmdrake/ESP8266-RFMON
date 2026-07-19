@@ -1,120 +1,68 @@
 # ESP8266 RFMON
 
-RFMON Created by GROK and Implemented by TMDrake
+**RF Power Monitor & SNMP Agent for Amateur Radio / Ham Radio Applications**
 
-## Overview
+Created with assistance from Grok (xAI) and implemented by [TMDrake](https://github.com/tmdrake).
 
-ESP8266 RFMON is an RF (Radio Frequency) power monitoring system built on the **ESP8266 NodeMCU microcontroller**. It monitors RF power levels, temperature, and device health metrics, exposing all data via SNMP for remote network management and alerting.
+![License](https://img.shields.io/github/license/tmdrake/ESP8266-RFMON)
+![Language](https://img.shields.io/badge/language-C%2B%2B-blue)
+![Platform](https://img.shields.io/badge/platform-ESP8266-orange)
+
+## About
+
+This project turns a low-cost **NodeMCU (ESP8266)** into a compact, network-enabled **RF Power Monitor** with full SNMP (Simple Network Management Protocol) support. It detects PTT (Push-To-Talk) activation, measures RF power via an analog tap, monitors temperature with a DS18B20 sensor, and exposes everything via SNMP for integration with network monitoring tools (e.g., Zabbix, LibreNMS, PRTG, or custom scripts).
+
+Key use case: Monitor your amateur radio transceiver or amplifier remotely — get instant alerts when transmitting and track power levels, temperature, and device health.
+
+**Rev 1.3.0** — Includes DHCP/static IP flexibility, improved EEPROM persistence, debug output, and robust SNMP trap support.
 
 ## Features
 
-### Core Capabilities
-
-- **RF Power Monitoring**: Monitors RF power levels (0-1V analog input), converts readings to 0-100% power scale, and detects RF transmissions via PTT (Push-To-Talk)
-- **SNMP Agent**: Exposes all monitoring data via SNMP (Simple Network Management Protocol) for remote network management tools and real-time monitoring
-- **Temperature Sensing**: Reads DS18B20 digital temperature sensors via 1-Wire protocol for ambient or device temperature monitoring
-- **WiFi Connectivity**: Connects to configured WiFi networks with support for both DHCP and static IP addressing
-- **SNMP Traps**: Sends alert traps when PTT events occur or configuration values change
-- **Persistent Configuration**: Uses EEPROM to save settings across device reboots
-- **WiFi Signal Monitoring**: Tracks WiFi signal strength (RSSI)
-- **Debug Mode**: Optional verbose serial output for troubleshooting
+- **PTT Detection** — Active-low input (GPIO5/D1) with internal pull-up.
+- **RF Power Monitoring** — Analog input (A0) scaled to 0-100% (configurable mapping).
+- **Temperature Monitoring** — DS18B20 1-Wire sensor (GPIO2/D4).
+- **Full SNMPv1/v2c Agent** — RFC1213-MIB system info + custom enterprise OIDs.
+- **SNMP Traps** — Sends traps on PTT activation and settable value changes (with Inform support).
+- **WiFi Configuration** — Persistent SSID/password, DHCP or static IP via serial menu.
+- **EEPROM Persistence** — Saves all settings (network, communities, contact info) across reboots.
+- **Serial Configuration Menu** — Easy setup without recompiling.
+- **Debug Output** — Toggleable real-time monitoring via Serial.
+- **Low Resource** — Runs comfortably on ESP8266 with free heap monitoring.
 
 ## Hardware Requirements
 
-- **Microcontroller**: ESP8266 NodeMCU 1.0
-- **Temperature Sensor**: DS18B20 digital thermometer with 4.7kΩ pull-up resistor to 3.3V
-- **RF Power Tap**: 0-1V analog signal from RF detector circuit with 10kΩ pull-down recommended
-- **PTT Input**: Push-to-talk signal detection on GPIO 5 (D1) with active-low logic
-- **USB Serial Interface**: For configuration via UART menu
+### Components
+- **ESP8266 Board**: NodeMCU 1.0 (V3) or equivalent (recommended).
+- **DS18B20 Temperature Sensor** — Waterproof or TO-92 package + 4.7kΩ pull-up resistor.
+- **RF Power Tap** — Voltage divider or directional coupler outputting 0-1V (safe for ESP ADC).
+- **PTT Signal** — Active-low from transceiver (or opto-isolated for safety).
 
-### Pin Assignments
+### Recommended Wiring
 
-| Function | GPIO Pin | Physical Pin |
-|----------|----------|--------------|
-| PTT Input | GPIO 5 | D1 |
-| RF Power (Analog) | A0 | A0 |
-| Temperature (1-Wire) | GPIO 2 | D4 |
+| Pin       | GPIO   | Function                  | Notes |
+|-----------|--------|---------------------------|-------|
+| D1        | GPIO5  | PTT (active-low)          | Internal pull-up enabled |
+| A0        | ADC    | RF Power (0-1V)           | 10kΩ pull-down recommended |
+| D4        | GPIO2  | DS18B20 Data              | 4.7kΩ pull-up to 3.3V |
+| GND       | -      | Ground                    | Common ground |
+| 3.3V / 5V | -      | Power                     | DS18B20 can use 5V (level shift if needed) |
 
-## Configuration
+**Safety Note**: Use proper RF isolation / attenuators when tapping transmitter output. Do **not** connect high RF voltages directly to the ESP8266.
 
-The device provides an interactive serial menu for configuration. Connect via USB/serial at **115200 baud**:
+## Software Setup
 
-### Menu Options
+### Prerequisites
+- [Arduino IDE](https://www.arduino.cc/en/software) or PlatformIO.
+- ESP8266 Board Support (add `http://arduino.esp8266.com/stable/package_esp8266com_index.json` in Preferences).
+- Required Libraries (install via Library Manager):
+  - `ESP8266WiFi`
+  - `WiFiUDP` (included)
+  - [SNMP_Agent](https://github.com/0neblock/SNMP_Agent) (and SNMPTrap)
+  - `OneWire`
+  - `DallasTemperature`
+  - `EEPROM` (built-in)
 
-1. **Set SSID** - Configure WiFi network name
-2. **Set Password** - Configure WiFi password
-3. **Set Trap IP** - Set the destination IP for SNMP trap alerts
-4. **Set sysContact** - Configure contact information string
-5. **Set Community Strings** - Configure read/write SNMP community strings
-6. **IP Setup** - Configure DHCP or static IP networking
-7. **Show Current Settings** - Display all current configuration
-8. **Save and Reboot** - Save settings to EEPROM and restart device
-9. **Toggle Debug Output** - Enable/disable verbose serial debug output
-
-### Persistent Settings
-
-Configuration is stored in EEPROM and automatically loaded on startup:
-- WiFi SSID & Password
-- SNMP Trap Destination IP
-- SNMP Community Strings (read/write)
-- System Contact Information
-- Network Configuration (DHCP/Static IP, Gateway, Subnet Mask)
-
-## SNMP OIDs
-
-### System Information (RFC1213-MIB)
-
-| OID | Description |
-|-----|-------------|
-| `.1.3.6.1.2.1.1.1.0` | System Description |
-| `.1.3.6.1.2.1.1.3.0` | System Uptime |
-| `.1.3.6.1.2.1.1.4.0` | System Contact |
-| `.1.3.6.1.2.1.1.5.0` | System Name |
-| `.1.3.6.1.2.1.1.6.0` | System Location |
-| `.1.3.6.1.2.1.1.7.0` | System Services |
-
-### RF Monitor Data (Custom OIDs)
-
-| OID | Description | Range |
-|-----|-------------|-------|
-| `.1.3.6.1.4.1.63637.1.0` | RF Power Level | 0-100% |
-| `.1.3.6.1.4.1.63637.1.1` | PTT State | 0=Idle, 1=TX |
-| `.1.3.6.1.4.1.63637.1.2` | Last PTT RF Power | 0-100% |
-| `.1.3.6.1.4.1.63637.1.3` | WiFi Signal Strength | RSSI (dBm) |
-| `.1.3.6.1.4.1.63637.1.4` | Temperature | Celsius × 100 |
-
-### SNMP Traps
-
-- **Settable Number Trap** (`.1.3.6.1.2.1.33.2`): Triggered when settable values are modified
-- **PTT Trap** (`.1.3.6.1.4.1.63637.2.0`): Triggered when PTT transmit begins, includes RF power level
-
-## Usage
-
-1. **Flash Firmware**: Upload the sketch to your ESP8266 using Arduino IDE
-2. **Configure Network**: Connect via serial terminal and use the menu to configure WiFi and SNMP settings
-3. **Monitor Remotely**: Use any SNMP client (e.g., `snmpwalk`, Nagios, Zabbix) to query the device
-4. **Alert Setup**: Configure SNMP trap destinations for real-time alerts
-
-## Application
-
-This device is designed for:
-- **Amateur Radio**: RF power monitoring during transmissions
-- **RF Lab Applications**: Power analysis and device health tracking
-- **Network Monitoring**: SNMP-based remote device monitoring and alerting
-
-## Dependencies
-
-- ESP8266 Core (Arduino)
-- WiFi Library (ESP8266)
-- SNMP_Agent Library
-- OneWire Library
-- DallasTemperature Library
-- EEPROM Library
-
-## Author
-
-**RFMON** created by GROK and implemented by TMDrake
-
----
-
-*Revision 1.3.0*
+### Installation
+1. Clone the repo:
+   ```bash
+   git clone https://github.com/tmdrake/ESP8266-RFMON.git
